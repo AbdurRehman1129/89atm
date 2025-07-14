@@ -1,98 +1,146 @@
 import requests
 import json
-import random
 import time
-from fake_useragent import UserAgent
-import uuid
 import os
+import logging
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from fake_useragent import UserAgent
 
 # Initialize UserAgent for randomizing headers
 ua = UserAgent()
 
-# Headers template
-def get_headers():
-    return {
-        "Sec-Ch-Ua-Platform": '"Windows"',
-        "Accept-Language": "en-GB,en;q=0.9",
-        "Accept": "application/json, text/plain, */*",
-        "Sec-Ch-Ua": '"Not)A;Brand";v="8", "Chromium";v="138"',
-        "Content-Type": "text/plain",
-        "Sec-Ch-Ua-Mobile": "?0",
-        "User-Agent": ua.random,
-        "Origin": "https://89atm.me",
-        "Sec-Fetch-Site": "same-site",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Dest": "empty",
-        "Referer": "https://89atm.me/",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Priority": "u=1, i"
-    }
+# Set up logging without timestamps
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s',
+    handlers=[logging.StreamHandler()]
+)
 
-# Read numbers from a file (one per line)
-def read_numbers(file_path):
-    try:
-        with open(file_path, 'r') as file:
-            return [line.strip() for line in file if line.strip()]
-    except FileNotFoundError:
-        print(f"Error: {file_path} not found")
-        return []
+class ATMChecker:
+    def __init__(self):
+        self.session = self._create_session()
+        self.headers = self._get_headers()
+        self.api_urls = {
+            "login": "https://api.89atm.me/login/login",
+            "page": "https://api.89atm.me/taskhosting/page",
+            "ws_code": "https://api.89atm.me/task/getwswebcode"
+        }
+        self.max_retries = 3
+        self.retry_delay = 5
+        self.password = self._read_password()
 
-# Read existing sent data from sent.json
-def read_sent_data():
-    try:
-        if os.path.exists('sent.json'):
-            with open('sent.json', 'r') as file:
-                data = json.load(file)
-                # Ensure data is a list
-                return data if isinstance(data, list) else []
-        return []
-    except Exception as e:
-        print(f"Error reading sent.json: {str(e)}")
-        return []
+    def _create_session(self):
+        session = requests.Session()
+        retries = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504]
+        )
+        session.mount('https://', HTTPAdapter(max_retries=retries))
+        return session
 
-# Write to sent.json
-def write_sent_data(data):
-    try:
-        with open('sent.json', 'w') as file:
-            json.dump(data, file, indent=4)
-    except Exception as e:
-        print(f"Error writing to sent.json: {str(e)}")
+    def _get_headers(self):
+        return {
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Accept-Language": "en-GB,en;q=0.9",
+            "Accept": "application/json, text/plain, */*",
+            "Sec-Ch-Ua": '"Not)A;Brand";v="8", "Chromium";v="138"',
+            "Content-Type": "application/json",
+            "Sec-Ch-Ua-Mobile": "?0",
+            "User-Agent": ua.random,
+            "Origin": "https://89atm.me",
+            "Sec-Fetch-Site": "same-site",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Referer": "https://89atm.me/",
+            "Priority": "u=1, i"
+        }
 
-# Main automation function
-def automate_task():
-    # Read account numbers and ws_account numbers
-    acc_numbers = read_numbers('acc.txt')
-    ws_numbers = read_numbers('num.txt')
-    sent_data = read_sent_data()
-    
-    if not acc_numbers:
-        print("No account numbers found in acc.txt")
-        return
-    
-    if not ws_numbers:
-        print("No ws_account numbers found in num.txt")
-        return
+    def _read_password(self):
+        try:
+            with open('pwd.txt', 'r', encoding='utf-8') as file:
+                password = file.read().strip()
+                if not password:
+                    logging.error("Password file (pwd.txt) is empty")
+                    exit(1)
+                return password
+        except FileNotFoundError:
+            logging.error("Password file (pwd.txt) not found")
+            exit(1)
+        except Exception as e:
+            logging.error(f"Error reading pwd.txt: {str(e)}")
+            exit(1)
 
-    # Filter out ws_account numbers already used in sent_data
-    used_ws_accounts = {entry['ws_account'] for entry in sent_data}
-    ws_numbers = [ws for ws in ws_numbers if ws not in used_ws_accounts]
-    if not ws_numbers:
-        print("No unused ws_account numbers available in num.txt")
-        return
+    def _read_file(self, file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return [line.strip() for line in file if line.strip()]
+        except FileNotFoundError:
+            logging.error(f"{file_path} not found")
+            return []
+        except Exception as e:
+            logging.error(f"Error reading {file_path}: {str(e)}")
+            return []
 
-    # API endpoints
-    login_url = "https://api.89atm.me/login/login"
-    page_url = "https://api.89atm.me/taskhosting/page"
-    ws_code_url = "https://api.89atm.me/task/getwswebcode"
+    def _read_sent_data(self):
+        try:
+            if os.path.exists('sent.json'):
+                with open('sent.json', 'r', encoding='utf-8') as file:
+                    data = json.load(file)
+                    return data if isinstance(data, list) else []
+            return []
+        except Exception as e:
+            logging.error(f"Error reading sent.json: {str(e)}")
+            return []
 
-    for acc_number in acc_numbers:
-        print(f"\nProcessing account: {acc_number}")
-        
+    def _write_sent_data(self, data):
+        try:
+            with open('sent.json', 'w', encoding='utf-8') as file:
+                json.dump(data, file, indent=4)
+        except Exception as e:
+            logging.error(f"Error writing to sent.json: {str(e)}")
+
+    def _update_num_file(self, ws_numbers):
+        try:
+            with open('num.txt', 'w', encoding='utf-8') as f:
+                f.write('\n'.join(ws_numbers))
+        except Exception as e:
+            logging.error(f"Error updating num.txt: {str(e)}")
+
+    def _api_request(self, url, payload, token=None):
+        full_url = f"{url}?token={token}" if token else url
+        for attempt in range(self.max_retries):
+            try:
+                response = self.session.post(
+                    full_url,
+                    headers=self.headers,
+                    data=json.dumps(payload),
+                    timeout=20
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("code") == 30000:  # Skip this number
+                        logging.info(f"Skipping due to code 30000 for URL: {url}")
+                        return None
+                    return data
+                logging.error(f"API request failed for {url}: HTTP {response.status_code} - Response: {response.text}")
+            except requests.exceptions.RequestException as e:
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay*0.2)
+                    continue
+                logging.error(f"API request error for {url}: {str(e)}")
+            except Exception as e:
+                logging.error(f"Unexpected error for {url}: {str(e)}")
+            return None
+
+    def _process_account(self, acc_number, ws_numbers, sent_data):
         # Step 1: Login
+        logging.info(f"\nTrying account: {acc_number}")
         login_payload = {
             "code": 86,
             "user_name": acc_number,
-            "pwd": "34a5a022276e193232f3d9791726c88d",
+            "pwd": self.password,
             "autologin": False,
             "lang": "",
             "device": "",
@@ -100,23 +148,16 @@ def automate_task():
             "httpRequestIndex": 0,
             "httpRequestCount": 0
         }
-        
-        try:
-            response = requests.post(login_url, headers=get_headers(), data=json.dumps(login_payload))
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("code") == 0 and data.get("msg") == "success":
-                    token = data["data"]["token"]
-                    print(f"Login successful for {acc_number}.")
-                else:
-                    print(f"Login failed for {acc_number}: {data.get('msg')}")
-                    continue
-            else:
-                print(f"Login request failed for {acc_number}: HTTP {response.status_code}")
-                continue
-        except Exception as e:
-            print(f"Error during login for {acc_number}: {str(e)}")
-            continue
+
+        login_data = self._api_request(self.api_urls["login"], login_payload)
+        if not login_data:
+            return False
+        if login_data.get("code") != 0:
+            logging.error(f"Login failed: {login_data.get('msg', 'Unknown error')}")
+            return False
+
+        token = login_data["data"]["token"]
+        logging.info(f"Login successful")
 
         # Step 2: Check online status
         page_payload = {
@@ -125,109 +166,102 @@ def automate_task():
             "httpRequestIndex": 0,
             "httpRequestCount": 0
         }
-        
-        try:
-            page_url_with_token = f"{page_url}?token={token}"
-            response = requests.post(page_url_with_token, headers=get_headers(), data=json.dumps(page_payload))
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("code") == 0 and data.get("msg") == "success":
-                    # Check if data["data"]["data"] is null or empty
-                    if not data["data"]["data"]:  # Handles both null and empty list cases
-                        print(f"Account {acc_number} has no ws_account. Proceeding to submit ws_account.")
-                        # Step 3: Try submitting ws_account numbers
-                        for ws_account in ws_numbers[:]:  # Create a copy to avoid modifying while iterating
-                            ws_payload = {
-                                "ws_account": ws_account,
-                                "httpRequestIndex": 0,
-                                "httpRequestCount": 0
-                            }
-                            try:
-                                ws_url_with_token = f"{ws_code_url}?token={token}"
-                                response = requests.post(ws_url_with_token, headers=get_headers(), data=json.dumps(ws_payload))
-                                if response.status_code == 200:
-                                    ws_data = response.json()
-                                    if ws_data.get("code") == 0 and ws_data.get("msg") == "success":
-                                        print(f"Successfully submitted ws_account {ws_account}. Code: {ws_data['data']['code']}")
-                                        # Remove used number from ws_numbers
-                                        ws_numbers.remove(ws_account)
-                                        # Update num.txt
-                                        with open('num.txt', 'w') as f:
-                                            f.write('\n'.join(ws_numbers))
-                                        # Add to sent_data
-                                        try:
-                                            sent_data.append({
-                                                "account": acc_number,
-                                                "ws_account": ws_account,
-                                                "code": ws_data['data']['code']
-                                            })
-                                            # Update sent.json
-                                            write_sent_data(sent_data)
-                                        except Exception as e:
-                                            print(f"Error appending to sent_data for ws_account {ws_account}: {str(e)}")
-                                        break  # Move to next account after successful submission
-                                    else:
-                                        print(f"Failed to submit ws_account {ws_account}: {ws_data.get('msg')}")
-                                        if ws_data.get("code") == 10052:
-                                            print("Waiting 5 seconds due to rate limit...")
-                                            time.sleep(5)
-                                else:
-                                    print(f"WS request failed for {ws_account}: HTTP {response.status_code}")
-                            except Exception as e:
-                                print(f"Error submitting ws_account {ws_account}: {str(e)}")
-                    else:
-                        for item in data["data"]["data"]:
-                            if item.get("status") == 1:
-                                print(f"Account {acc_number} is already online with ws_account: {item['ws_account']}")
-                                break
-                        else:
-                            print(f"Account {acc_number} is not online. Proceeding to submit ws_account.")
-                            # Step 3: Try submitting ws_account numbers
-                            for ws_account in ws_numbers[:]:  # Create a copy to avoid modifying while iterating
-                                ws_payload = {
-                                    "ws Account": ws_account,
-                                    "httpRequestIndex": 0,
-                                    "httpRequestCount": 0
-                                }
-                                try:
-                                    ws_url_with_token = f"{ws_code_url}?token={token}"
-                                    response = requests.post(ws_url_with_token, headers=get_headers(), data=json.dumps(ws_payload))
-                                    if response.status_code == 200:
-                                        ws_data = response.json()
-                                        if ws_data.get("code") == 0 and ws_data.get("msg") == "success":
-                                            print(f"Successfully submitted ws_account {ws_account}. Code: {ws_data['data']['code']}")
-                                            # Remove used number from ws_numbers
-                                            ws_numbers.remove(ws_account)
-                                            # Update num.txt
-                                            with open('num.txt', 'w') as f:
-                                                f.write('\n'.join(ws_numbers))
-                                            # Add to sent_data
-                                            try:
-                                                sent_data.append({
-                                                    "account": acc_number,
-                                                    "ws_account": ws_account,
-                                                    "code": ws_data['data']['code']
-                                                })
-                                                # Update sent.json
-                                                write_sent_data(sent_data)
-                                            except Exception as e:
-                                                print(f"Error appending to sent_data for ws_account {ws_account}: {str(e)}")
-                                            break  # Move to next account after successful submission
-                                        else:
-                                            print(f"Failed to submit ws_account {ws_account}: {ws_data.get('msg')}")
-                                            if ws_data.get("code") == 10052:
-                                                print("Waiting 5 seconds due to rate limit...")
-                                                time.sleep(5)
-                                    else:
-                                        print(f"WS request failed for {ws_account}: HTTP {response.status_code}")
-                                except Exception as e:
-                                    print(f"Error submitting ws_account {ws_account}: {str(e)}")
+
+        page_data = self._api_request(self.api_urls["page"], page_payload, token)
+        if not page_data:
+            return False
+        if page_data.get("code") != 0:
+            logging.error(f"Status check failed: {page_data.get('msg', 'Unknown error')}")
+            return False
+
+        # Check if account has active ws_account
+        if page_data["data"]["data"]:
+            for item in page_data["data"]["data"]:
+                if item.get("status") == 1:
+                    logging.info(f"Already online with ws_account: {item['ws_account']}")
+                    return True
+            logging.info(f"Account has inactive ws_accounts")
+
+        # Step 3: Submit ws_account
+        for ws_account in ws_numbers[:]:
+            logging.info(f"Trying ws_account: {ws_account}")
+            ws_payload = {
+                "ws_account": ws_account,
+                "httpRequestIndex": 0,
+                "httpRequestCount": 0
+            }
+
+            for attempt in range(self.max_retries):  # Retry loop for rate limit and timeouts
+                ws_data = self._api_request(self.api_urls["ws_code"], ws_payload, token)
+                if not ws_data:
+                    if attempt < self.max_retries - 1:
+                        logging.info(f"Retrying ws_account {ws_account} in {self.retry_delay} seconds...")
+                        time.sleep(self.retry_delay*0.2)
+                        continue
+                    logging.error(f"Failed to process ws_account {ws_account} after {self.max_retries} attempts")
+                    break
+
+                if ws_data.get("code") == 0:
+                    logging.info(f"Success! Code: {ws_data['data']['code']}")
+                    # Remove used ws_account and update files
+                    ws_numbers.remove(ws_account)
+                    self._update_num_file(ws_numbers)
+                    
+                    # Add to sent_data and update sent.json
+                    sent_data.append({
+                        "account": acc_number,
+                        "ws_account": ws_account,
+                        "code": ws_data['data']['code']
+                    })
+                    self._write_sent_data(sent_data)
+                    return True
+                elif ws_data.get("code") == 10052:
+                    logging.info(f"Rate limit reached for ws_account {ws_account}, waiting 1 seconds...")
+                    time.sleep(5)
+                    continue  # Retry same ws_account
+                elif ws_data.get("code") == 30000:
+                    logging.info("Skipping to next account due to code 30000")
+                    return False
                 else:
-                    print(f"Failed to check online status for {acc_number}: {data.get('msg')}")
-            else:
-                print(f"Page request failed for {acc_number}: HTTP {response.status_code}")
-        except Exception as e:
-            print(f"Error checking online status for {acc_number}: {str(e)}")
+                    logging.error(f"Failed: {ws_data.get('msg', 'Unknown error')}")
+                    break  # Move to next ws_account on other errors
+
+        return False
+
+    def run(self):
+        acc_numbers = self._read_file('acc.txt')
+        ws_numbers = self._read_file('num.txt')
+        sent_data = self._read_sent_data()
+
+        if not acc_numbers:
+            logging.error("No account numbers found in acc.txt")
+            return
+
+        if not ws_numbers:
+            logging.error("No ws_account numbers found in num.txt")
+            return
+
+        # Filter out used ws_accounts
+        used_ws_accounts = {entry['ws_account'] for entry in sent_data}
+        ws_numbers = [ws for ws in ws_numbers if ws not in used_ws_accounts]
+        
+        if not ws_numbers:
+            logging.error("No unused ws_account numbers available")
+            return
+
+        for acc_number in acc_numbers:
+            success = False
+            for attempt in range(self.max_retries):
+                if self._process_account(acc_number, ws_numbers, sent_data):
+                    success = True
+                    break
+                if attempt < self.max_retries - 1:
+                    logging.info(f"Retrying account {acc_number} due to failure... (Attempt {attempt + 1})")
+                    time.sleep(self.retry_delay*0.2)
+
+            # Update headers with new User-Agent for next account
+            self.headers["User-Agent"] = ua.random
 
 if __name__ == "__main__":
-    automate_task()
+    checker = ATMChecker()
+    checker.run()
