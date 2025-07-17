@@ -14,22 +14,16 @@ class WhatsAppLinker:
         self.passwords = []
         self.numbers = []
         self.sent_codes = []
+        self.signed_in_accounts = {}  # Track accounts that have signed in today
         
-    import random
-
     def generate_fake_user_agent(self):
         """Generate a fake user agent with randomized browser/engine"""
-        # Browser versions
         chrome_versions = ['138.0.0.0', '137.0.0.0', '136.0.0.0', '135.0.0.0']
         firefox_versions = ['120.0', '119.0', '118.0', '117.0']
         edge_versions = ['118.0.2088.46', '117.0.2045.31', '116.0.1938.62']
-
-        # OS versions
         windows_versions = ['10.0', '11.0']
         macos_versions = ['10_15_7', '11_6', '12_6', '13_5']
         linux_versions = ['x86_64', 'i686']
-
-        # Browser engines
         engines = [
             {
                 'name': 'Chrome',
@@ -55,8 +49,6 @@ class WhatsAppLinker:
                 ]
             }
         ]
-
-        # Select a random browser and then a random template for that browser
         selected_browser = random.choice(engines)
         return random.choice(selected_browser['templates'])
 
@@ -81,7 +73,7 @@ class WhatsAppLinker:
         }
     
     def load_files(self):
-        """Load accounts, passwords, and numbers from files"""
+        """Load accounts, passwords, numbers, and signed-in accounts from files"""
         try:
             with open('acc.txt', 'r') as f:
                 self.accounts = [line.strip() for line in f.readlines() if line.strip()]
@@ -93,12 +85,18 @@ class WhatsAppLinker:
             with open('num.txt', 'r') as f:
                 self.numbers = [line.strip() for line in f.readlines() if line.strip()]
             
-            # Load sent codes if file exists
             if os.path.exists('send.json'):
                 with open('send.json', 'r') as f:
                     self.sent_codes = json.load(f)
             else:
                 self.sent_codes = []
+                
+            # Load signed-in accounts if file exists
+            if os.path.exists('signed_in.json'):
+                with open('signed_in.json', 'r') as f:
+                    self.signed_in_accounts = json.load(f)
+            else:
+                self.signed_in_accounts = {}
                 
         except FileNotFoundError as e:
             print(f"Error: Required file not found - {e}")
@@ -108,6 +106,11 @@ class WhatsAppLinker:
         """Save sent codes to JSON file"""
         with open('send.json', 'w') as f:
             json.dump(self.sent_codes, f, indent=2)
+    
+    def save_signed_in_accounts(self):
+        """Save signed-in accounts to JSON file"""
+        with open('signed_in.json', 'w') as f:
+            json.dump(self.signed_in_accounts, f, indent=2)
     
     def save_numbers_to_file(self):
         """Save updated numbers list back to file"""
@@ -189,6 +192,47 @@ class WhatsAppLinker:
             print(f"  Error checking numbers: {e}")
             return "error"
     
+    def sign_in_for_reward(self, token, username):
+        """Attempt to sign in for daily reward"""
+        # Check if account already signed in today
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        if username in self.signed_in_accounts and self.signed_in_accounts[username] == current_date:
+            print(f"  ℹ Account {username} already signed in today")
+            return True
+        
+        url = f"{self.base_url}/activity/signin?token={token}"
+        headers = self.get_headers()
+        
+        payload = {
+            "year": datetime.now().year,
+            "month": datetime.now().month,
+            "day": datetime.now().day,
+            "httpRequestIndex": 0,
+            "httpRequestCount": 0
+        }
+        
+        try:
+            response = self.session.post(url, headers=headers, json=payload, timeout=30)
+            data = response.json()
+            
+            if data.get('code') == 0:
+                print(f"  ✓ Successfully signed in for daily reward for {username}")
+                self.signed_in_accounts[username] = current_date
+                self.save_signed_in_accounts()
+                return True
+            elif data.get('code') == 10072:
+                print(f"  ℹ Account {username} already signed in today.")
+                self.signed_in_accounts[username] = current_date
+                self.save_signed_in_accounts()
+                return True
+            else:
+                print(f"  ✗ Failed to sign in for daily reward for {username}: {data.get('msg', 'Unknown error')}")
+                return False
+                
+        except Exception as e:
+            print(f"  ✗ Error signing in for daily reward for {username}: {e}")
+            return False
+    
     def get_linking_code(self, token, number, max_retries=10):
         """Get linking code for a number"""
         url = f"{self.base_url}/task/getwswebcode?token={token}"
@@ -210,24 +254,20 @@ class WhatsAppLinker:
                 msg = data.get('msg', '')
                 
                 if code == 0:
-                    # Success - code generated
                     linking_data = data.get('data', {})
                     linking_code = linking_data.get('code')
                     print(f"    ✓ Linking code generated: {linking_code}")
                     return 'success', linking_code
                 
                 elif code == 2008:
-                    # Number already linked to another account
                     print(f"    ✗ Number {number} already linked to another account")
                     return 'already_linked', None
                 
                 elif code == 30000:
-                    # Failed to get code
                     print(f"    ✗ Failed to get linking code for {number}")
                     return 'failed', None
                 
                 elif code == 10052:
-                    # Rate limit - wait and retry
                     print(f"    ⏳ Rate limit hit, waiting 20 seconds...")
                     time.sleep(20)
                     continue
@@ -245,22 +285,21 @@ class WhatsAppLinker:
         print(f"    ✗ Max retries exceeded for {number}")
         return 'max_retries', None
     
-    def process_account(self, username):
+    def process_account(self, username, account_number, total_accounts):
         """Process a single account"""
         print(f"\n{'='*50}")
-        print(f"Processing account: {username}")
+        print(f"Processing account {account_number}/{total_accounts}: {username}")
         print(f"{'='*50}")
         
-        # Login
         token, uid = self.login(username)
         if not token:
             return False
         
-        # Check numbers status
         status = self.check_numbers_status(token)
         
         if status == "has_online":
-            print(f"  ✓ Account {username} has online numbers - skipping")
+            print(f"  ✓ Account {username} has online numbers")
+            self.sign_in_for_reward(token, username)
             return True
         
         elif status == "no_numbers" or status == "all_offline":
@@ -282,7 +321,6 @@ class WhatsAppLinker:
                 result, linking_code = self.get_linking_code(token, number)
                 
                 if result == 'success':
-                    # Save linking code
                     code_data = {
                         'username': username,
                         'number': number,
@@ -292,7 +330,6 @@ class WhatsAppLinker:
                     self.sent_codes.append(code_data)
                     self.save_sent_codes()
                     
-                    # Remove number from list
                     self.numbers.remove(number)
                     self.save_numbers_to_file()
                     
@@ -303,7 +340,6 @@ class WhatsAppLinker:
                     return True
                 
                 elif result == 'already_linked':
-                    # Remove number from list and try next
                     self.numbers.remove(number)
                     numbers_to_try.remove(number)
                     self.save_numbers_to_file()
@@ -311,22 +347,19 @@ class WhatsAppLinker:
                     continue
                 
                 elif result == 'failed':
-                    # Skip this number and try next
                     numbers_to_try.remove(number)
                     time.sleep(5)
                     continue
                 
                 elif result == 'max_retries':
-                    # Try next number
                     numbers_to_try.remove(number)
                     time.sleep(2)
                     continue
             
-            # If we've tried all numbers and none worked, start over
             if not numbers_to_try:
                 print(f"  ⚠ All numbers tried for {username}, restarting number list...")
                 numbers_to_try = self.numbers.copy()
-                time.sleep(10)  # Wait before restarting
+                time.sleep(10)
         
         return False
     
@@ -350,13 +383,17 @@ class WhatsAppLinker:
     def check_remaining_accounts(self):
         """Check which accounts still need linking"""
         remaining = []
+        total_accounts = len(self.accounts)
         
-        for account in self.accounts:
+        for index, account in enumerate(self.accounts, 1):
+            print(f"\nChecking account {index}/{total_accounts}: {account}")
             token, uid = self.login(account)
             if token:
                 status = self.check_numbers_status(token)
                 if status != "has_online":
                     remaining.append(account)
+                else:
+                    self.sign_in_for_reward(token, account)
         
         return remaining
     
@@ -364,29 +401,27 @@ class WhatsAppLinker:
         """Main execution function"""
         print("WhatsApp Number Linking Script")
         print("=" * 40)
-         # Delete send.json if it exists (NEW CODE ADDED HERE)
         if os.path.exists("send.json"):
             try:
                 os.remove("send.json")
                 print("✓ Deleted previous send.json file")
             except Exception as e:
                 print(f"✗ Failed to delete send.json: {e}")
-        # Load files
+        
         self.load_files()
         print(f"Loaded {len(self.accounts)} accounts and {len(self.numbers)} numbers")
         
-        # Process all accounts
-        for username in self.accounts:
-            success = self.process_account(username)
+        total_accounts = len(self.accounts)
+        for index, username in enumerate(self.accounts, 1):
+            success = self.process_account(username, index, total_accounts)
             if success:
                 print(f"✓ Completed processing for {username}")
-                time.sleep(10)  # Short delay between accounts
+                time.sleep(10)
             else:
                 print(f"✗ Failed to process {username}")
             
-            time.sleep(2)  # Short delay between accounts
+            time.sleep(2)
         
-        # Check for remaining accounts
         print(f"\n{'='*50}")
         print("CHECKING FOR REMAINING ACCOUNTS")
         print(f"{'='*50}")
@@ -398,15 +433,13 @@ class WhatsAppLinker:
             for acc in remaining:
                 print(f"  - {acc}")
             
-            # Display sent codes
             self.display_sent_codes()
             
-            # Ask user if they want to generate new codes
             while True:
                 choice = input("\nDo you want to generate new codes for remaining accounts? (y/n): ").lower()
                 if choice in ['y', 'yes']:
-                    for acc in remaining:
-                        self.process_account(acc)
+                    for index, acc in enumerate(remaining, 1):
+                        self.process_account(acc, index, len(remaining))
                     break
                 elif choice in ['n', 'no']:
                     break
@@ -416,7 +449,6 @@ class WhatsAppLinker:
         else:
             print("✓ All accounts have been processed successfully!")
         
-        # Ask if user wants to start over
         while True:
             choice = input("\nDo you want to start the process again? (y/n): ").lower()
             if choice in ['y', 'yes']:
