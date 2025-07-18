@@ -416,7 +416,6 @@ class WhatsAppLinker:
             success = self.process_account(username, index, total_accounts)
             if success:
                 print(f"✓ Completed processing for {username}")
-                time.sleep(10)
             else:
                 print(f"✗ Failed to process {username}")
             
