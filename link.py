@@ -82,8 +82,7 @@ class WhatsAppLinker:
                 password = f.read().strip()
                 self.password_hash = hashlib.md5(password.encode()).hexdigest()
             
-            with open('num.txt', 'r') as f:
-                self.numbers = [line.strip() for line in f.readlines() if line.strip()]
+            self.load_numbers()  # Load numbers initially
             
             if os.path.exists('send.json'):
                 with open('send.json', 'r') as f:
@@ -100,6 +99,15 @@ class WhatsAppLinker:
                 
         except FileNotFoundError as e:
             print(f"Error: Required file not found - {e}")
+            exit(1)
+    
+    def load_numbers(self):
+        """Load numbers from num.txt"""
+        try:
+            with open('num.txt', 'r') as f:
+                self.numbers = [line.strip() for line in f.readlines() if line.strip()]
+        except FileNotFoundError:
+            print("Error: num.txt file not found")
             exit(1)
     
     def save_sent_codes(self):
@@ -314,7 +322,15 @@ class WhatsAppLinker:
         """Link a number to account"""
         numbers_to_try = self.numbers.copy()
         
-        while numbers_to_try:
+        while True:
+            if not numbers_to_try:  # If numbers list is empty, reload from file
+                print(f"  ⚠ All numbers tried for {username}, reloading number list...")
+                self.load_numbers()
+                numbers_to_try = self.numbers.copy()
+                if not numbers_to_try:  # If still empty, exit
+                    print(f"  ✗ No numbers available in num.txt for {username}")
+                    return False
+            
             for i, number in enumerate(numbers_to_try):
                 print(f"\n  Trying number: {number}")
                 
@@ -355,11 +371,6 @@ class WhatsAppLinker:
                     numbers_to_try.remove(number)
                     time.sleep(2)
                     continue
-            
-            if not numbers_to_try:
-                print(f"  ⚠ All numbers tried for {username}, restarting number list...")
-                numbers_to_try = self.numbers.copy()
-                time.sleep(10)
         
         return False
     
@@ -419,7 +430,7 @@ class WhatsAppLinker:
             else:
                 print(f"✗ Failed to process {username}")
             
-            time.sleep(2)
+            time.sleep(10)
         
         print(f"\n{'='*50}")
         print("CHECKING FOR REMAINING ACCOUNTS")
