@@ -324,13 +324,18 @@ class WhatsAppLinker:
         
         while True:
             if not numbers_to_try:  # If numbers list is empty, reload from file
-                print(f"  ⚠ All numbers tried for {username}, reloading number list...")
-                self.load_numbers()
-                numbers_to_try = self.numbers.copy()
-                if not numbers_to_try:  # If still empty, exit
-                    print(f"  ✗ No numbers available in num.txt for {username}")
-                    return False
-            
+                print(f"\n  ⚠ All numbers tried for {username}, reloading number list...")
+                while True:
+                    self.load_numbers()
+                    numbers_to_try = self.numbers.copy()
+                    if numbers_to_try:
+                        print(f"  ✓ Reloaded {len(numbers_to_try)} numbers from num.txt")
+                        break
+                    elif not numbers_to_try:  # If still empty, exit
+                        print(f"  ✗ No numbers available in num.txt for {username}")
+                        input("Press Enter to after adding numbers in num.txt...")
+                        
+
             for i, number in enumerate(numbers_to_try):
                 print(f"\n  Trying number: {number}")
                 
@@ -427,10 +432,11 @@ class WhatsAppLinker:
             success = self.process_account(username, index, total_accounts)
             if success:
                 print(f"✓ Completed processing for {username}")
+                time.sleep(10)
             else:
                 print(f"✗ Failed to process {username}")
             
-            time.sleep(10)
+            time.sleep(2)
         
         print(f"\n{'='*50}")
         print("CHECKING FOR REMAINING ACCOUNTS")
