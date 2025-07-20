@@ -16,21 +16,29 @@ class WhatsAppLinker:
         self.sent_codes = []
         self.signed_in_accounts = {}  # Track accounts that have signed in today
         
+
     def generate_fake_user_agent(self):
         """Generate a fake user agent with randomized browser/engine"""
-        chrome_versions = ['138.0.0.0', '137.0.0.0', '136.0.0.0', '135.0.0.0']
-        firefox_versions = ['120.0', '119.0', '118.0', '117.0']
-        edge_versions = ['118.0.2088.46', '117.0.2045.31', '116.0.1938.62']
-        windows_versions = ['10.0', '11.0']
-        macos_versions = ['10_15_7', '11_6', '12_6', '13_5']
-        linux_versions = ['x86_64', 'i686']
+        chrome_versions = ['138.0.0.0', '137.0.0.0', '136.0.0.0', '135.0.0.0', '139.0.0.0', '140.0.0.0', '141.0.0.0', '142.0.0.0', '143.0.0.0', '144.0.0.0', '145.0.0.0', '146.0.0.0', '147.0.0.0', '148.0.0.0']
+        firefox_versions = ['120.0', '119.0', '118.0', '117.0', '121.0', '122.0', '123.0', '124.0', '125.0', '126.0', '127.0', '128.0', '129.0', '130.0']
+        edge_versions = ['118.0.2088.46', '117.0.2045.31', '116.0.1938.62', '119.0.2151.97', '120.0.2210.61', '121.0.2277.83', '122.0.2365.66', '123.0.2420.53', '124.0.2478.51', '125.0.2535.85', '126.0.2592.68', '127.0.2651.74', '128.0.2739.42']
+        windows_versions = ['10.0', '11.0', '12.0', '13.0', '14.0', '15.0', '16.0', '17.0', '18.0', '19.0', '20.0', '21.0']
+        macos_versions = ['10_15_7', '11_6', '12_6', '13_5', '14_0', '14_1', '14_2', '14_3', '14_4', '14_5', '15_0', '15_1']
+        linux_versions = ['x86_64', 'i686', 'arm64', 'aarch64', 'x86', 'i386', 'ppc64le', 's390x', 'riscv64', 'loongarch64', 'mips64', 'sparc64']
         engines = [
             {
                 'name': 'Chrome',
                 'templates': [
                     f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36",
                     f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36",
-                    f"Mozilla/5.0 (X11; Linux {random.choice(linux_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36"
+                    f"Mozilla/5.0 (X11; Linux {random.choice(linux_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36",
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 OPR/101.0.0.0",
+                    f"Mozilla/5.0 (X11; Linux {random.choice(linux_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 OPR/101.0.0.0",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64; rv:109.0) Gecko/20100101 Firefox/{random.choice(firefox_versions)} Chrome/{random.choice(chrome_versions)}",
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
+                    f"Mozilla/5.0 (X11; Linux {random.choice(linux_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 UCBrowser/13.4.0.1306",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Vivaldi/6.2"
                 ]
             },
             {
@@ -38,14 +46,29 @@ class WhatsAppLinker:
                 'templates': [
                     f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64; rv:{random.choice(firefox_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)}",
                     f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}; rv:{random.choice(firefox_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)}",
-                    f"Mozilla/5.0 (X11; Linux {random.choice(linux_versions)}; rv:{random.choice(firefox_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)}"
+                    f"Mozilla/5.0 (X11; Linux {random.choice(linux_versions)}; rv:{random.choice(firefox_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)}",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; WOW64; rv:{random.choice(firefox_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)}",
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)} Waterfox/102.0",
+                    f"Mozilla/5.0 (X11; Linux {random.choice(linux_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)} PaleMoon/32.0.0",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) Gecko/20100101 Firefox/{random.choice(firefox_versions)} TorBrowser/12.0",
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)} LibreWolf/110.0",
+                    f"Mozilla/5.0 (X11; Linux {random.choice(linux_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)} Iceweasel/110.0",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) Gecko/20100101 Firefox/{random.choice(firefox_versions)} SeaMonkey/2.53.9"
                 ]
             },
             {
                 'name': 'Edge',
                 'templates': [
                     f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
-                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}"
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 EdgA/{random.choice(edge_versions)}",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} OPR/101.0.0.0",
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} Vivaldi/6.2",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} UCBrowser/13.4.0.1306",
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} CocCoc/110.0.0",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} Brave/1.45.0",
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} SamsungInternet/18.0"
                 ]
             }
         ]
