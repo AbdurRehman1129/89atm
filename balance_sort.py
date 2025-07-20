@@ -5,9 +5,6 @@ import random
 import hashlib
 from datetime import datetime
 import os
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-import uuid
 import shlex
 import string
 import logging
@@ -30,34 +27,21 @@ class BalanceSorter:
         self.accounts = []
         self.password_hash = ""
         self.payment_details = []
-        self.spreadsheet_id = "1I9FfkVE0bUEwti635UBODfsX8ZAQNhrRnmascSWrTCM"
-        self.credentials_file = "botdataproject-466108-43e1ae70be13.json"
-        self.scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        self.payment_bindings_file = "payment_bindings.txt"
         self.max_retries = 3  # Define max_retries
         self.retry_delay = 5  # Define retry_delay
-        self.service = self.setup_google_sheets()
+        self.setup_payment_bindings_file()
 
-    def setup_google_sheets(self):
-        """Set up Google Sheets API client with retry logic."""
-        for attempt in range(self.max_retries):
-            try:
-                creds = Credentials.from_service_account_file(self.credentials_file, scopes=self.scopes)
-                service = build("sheets", "v4", credentials=creds)
-                service.spreadsheets().values().append(
-                    spreadsheetId=self.spreadsheet_id,
-                    range="Test!A1",
-                    valueInputOption="RAW",
-                    body={"values": [["Test connection at " + datetime.now().strftime("%Y-%m-%d %H:%M")]]}
-                ).execute()
-                logger.info("Google Sheets connection verified")
-                return service
-            except Exception as e:
-                logger.error(f"Attempt {attempt + 1}/{self.max_retries} - Error setting up Google Sheets API: {e}")
-                if attempt < self.max_retries - 1:
-                    time.sleep(self.retry_delay)
-                else:
-                    logger.error("Failed to set up Google Sheets API after retries. Exiting.")
-                    exit(1)
+    def setup_payment_bindings_file(self):
+        """Ensure the payment bindings file exists and is initialized."""
+        try:
+            if not os.path.exists(self.payment_bindings_file):
+                with open(self.payment_bindings_file, "w") as f:
+                    f.write("username,bank_name,bank_user_name,bank_no\n")
+                logger.info("Created payment_bindings.txt")
+        except Exception as e:
+            logger.error(f"Error creating payment_bindings.txt: {e}")
+            exit(1)
 
     def generate_fake_user_agent(self):
         """Generate a fake user agent with randomized browser/engine."""
@@ -120,9 +104,11 @@ class BalanceSorter:
         try:
             with open("acc.txt", "r") as f:
                 self.accounts = [line.strip() for line in f.readlines() if line.strip()]
+
             with open("pwd.txt", "r") as f:
                 password = f.read().strip()
                 self.password_hash = hashlib.md5(password.encode()).hexdigest()
+
             with open("bank_details.txt", "r") as f:
                 self.payment_details = []
                 for line in f.readlines():
@@ -204,106 +190,75 @@ class BalanceSorter:
         return None, False, None
 
     def get_payment_binding_count(self, bank_no):
-        """Check how many accounts a payment method is bound to with retry logic."""
-        for attempt in range(self.max_retries):
-            try:
-                result = (
-                    self.service.spreadsheets()
-                    .values()
-                    .get(spreadsheetId=self.spreadsheet_id, range="Payment_Bindings!A:D")
-                    .execute()
-                )
-                values = result.get("values", [])
-                count = sum(1 for row in values[1:] if len(row) > 2 and row[2] == bank_no)
+        """Check how many accounts a payment method is bound to in the local payment bindings file."""
+        try:
+            with open(self.payment_bindings_file, "r") as f:
+                lines = f.readlines()[1:]  # Skip header
+                count = sum(1 for line in lines if line.strip() and line.split(",")[3].strip() == bank_no)
                 return count
-            except (requests.ConnectionError, requests.Timeout) as e:
-                logger.error(f"Attempt {attempt + 1}/{self.max_retries} - Network error checking payment binding count for {bank_no}: {e}")
-                if attempt < self.max_retries - 1:
-                    time.sleep(self.retry_delay)
-            except Exception as e:
-                logger.error(f"Error checking payment binding count for {bank_no}: {e}")
-                return 0
-        logger.error(f"Failed to check payment binding count for {bank_no} after {self.max_retries} attempts")
-        return 0
+        except Exception as e:
+            logger.error(f"Error reading payment bindings for {bank_no}: {e}")
+            return 0
 
     def update_payment_binding(self, username, bank_name, bank_user_name, bank_no):
-        """Update payment bindings in Google Sheets with retry logic."""
-        for attempt in range(self.max_retries):
-            try:
-                result = (
-                    self.service.spreadsheets()
-                    .values()
-                    .get(spreadsheetId=self.spreadsheet_id, range="Payment_Bindings!A:A")
-                    .execute()
-                )
-                values = result.get("values", [])
-                account_exists = False
-                for i, row in enumerate(values[1:], start=2):
-                    if row and row[0] == username:
-                        account_exists = True
-                        range_to_update = f"Payment_Bindings!A{i}:D{i}"
-                        self.service.spreadsheets().values().update(
-                            spreadsheetId=self.spreadsheet_id,
-                            range=range_to_update,
-                            valueInputOption="RAW",
-                            body={
-                                "values": [[username, bank_name, bank_user_name, bank_no]]
-                            },
-                        ).execute()
-                        break
-                if not account_exists:
-                    self.service.spreadsheets().values().append(
-                        spreadsheetId=self.spreadsheet_id,
-                        range="Payment_Bindings!A:D",
-                        valueInputOption="RAW",
-                        body={
-                            "values": [[username, bank_name, bank_user_name, bank_no]]
-                        },
-                    ).execute()
-                logger.info(f"Updated payment binding for {username}")
-                return True
-            except (requests.ConnectionError, requests.Timeout) as e:
-                logger.error(f"Attempt {attempt + 1}/{self.max_retries} - Network error updating payment binding for {username}: {e}")
-                if attempt < self.max_retries - 1:
-                    time.sleep(self.retry_delay)
-            except Exception as e:
-                logger.error(f"Error updating payment binding for {username}: {e}")
-                return False
-        logger.error(f"Failed to update payment binding for {username} after {self.max_retries} attempts")
-        return False
+        """Update payment bindings in the local payment bindings file."""
+        try:
+            # Read existing bindings
+            with open(self.payment_bindings_file, "r") as f:
+                lines = f.readlines()
+            
+            # Check if account exists and update or append
+            account_exists = False
+            updated_lines = [lines[0]]  # Keep header
+            for line in lines[1:]:
+                if line.strip() and line.split(",")[0].strip() == username:
+                    updated_lines.append(f"{username},{bank_name},{bank_user_name},{bank_no}\n")
+                    account_exists = True
+                else:
+                    updated_lines.append(line)
+            
+            if not account_exists:
+                updated_lines.append(f"{username},{bank_name},{bank_user_name},{bank_no}\n")
+            
+            # Write updated bindings
+            with open(self.payment_bindings_file, "w") as f:
+                f.writelines(updated_lines)
+            
+            logger.info(f"Updated payment binding for {username}")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating payment binding for {username}: {e}")
+            return False
 
     def clear_payment_binding(self, username):
-        """Clear payment binding for an account in Google Sheets with retry logic."""
-        for attempt in range(self.max_retries):
-            try:
-                result = (
-                    self.service.spreadsheets()
-                    .values()
-                    .get(spreadsheetId=self.spreadsheet_id, range="Payment_Bindings!A:A")
-                    .execute()
-                )
-                values = result.get("values", [])
-                for i, row in enumerate(values[1:], start=2):
-                    if row and row[0] == username:
-                        range_to_update = f"Payment_Bindings!A{i}:D{i}"
-                        self.service.spreadsheets().values().update(
-                            spreadsheetId=self.spreadsheet_id,
-                            range=range_to_update,
-                            valueInputOption="RAW",
-                            body={"values": [[username, "", "", ""]]},
-                        ).execute()
-                        logger.info(f"Cleared payment binding for {username}")
-                        return True
-                return True
-            except (requests.ConnectionError, requests.Timeout) as e:
-                logger.error(f"Attempt {attempt + 1}/{self.max_retries} - Network error clearing payment binding for {username}: {e}")
-                if attempt < self.max_retries - 1:
-                    time.sleep(self.retry_delay)
-            except Exception as e:
-                logger.error(f"Error clearing payment binding for {username}: {e}")
-                return False
-        logger.error(f"Failed to clear payment binding for {username} after {self.max_retries} attempts")
-        return False
+        """Clear payment binding for an account in the local payment bindings file."""
+        try:
+            # Read existing bindings
+            with open(self.payment_bindings_file, "r") as f:
+                lines = f.readlines()
+            
+            # Update the specific account's binding
+            updated_lines = [lines[0]]  # Keep header
+            account_found = False
+            for line in lines[1:]:
+                if line.strip() and line.split(",")[0].strip() == username:
+                    updated_lines.append(f"{username},,,\n")
+                    account_found = True
+                else:
+                    updated_lines.append(line)
+            
+            if not account_found:
+                return True  # No binding to clear, return True
+            
+            # Write updated bindings
+            with open(self.payment_bindings_file, "w") as f:
+                f.writelines(updated_lines)
+            
+            logger.info(f"Cleared payment binding for {username}")
+            return True
+        except Exception as e:
+            logger.error(f"Error clearing payment binding for {username}: {e}")
+            return False
 
     def generate_random_payment_details(self):
         """Generate random payment details: easypaisa, 6-digit number, 6-letter name."""
