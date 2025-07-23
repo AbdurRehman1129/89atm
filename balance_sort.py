@@ -27,21 +27,21 @@ class BalanceSorter:
         self.accounts = []
         self.password_hash = ""
         self.payment_details = []
-        self.payment_bindings_file = "payment_bindings.txt"
-        self.max_retries = 3  # Define max_retries
-        self.retry_delay = 5  # Define retry_delay
-        self.setup_payment_bindings_file()
+        self.max_retries = 3
+        self.retry_delay = 5
+        # Delete old output files at start
+        self.clear_old_files()
 
-    def setup_payment_bindings_file(self):
-        """Ensure the payment bindings file exists and is initialized."""
-        try:
-            if not os.path.exists(self.payment_bindings_file):
-                with open(self.payment_bindings_file, "w") as f:
-                    f.write("username,bank_name,bank_user_name,bank_no\n")
-                logger.info("Created payment_bindings.txt")
-        except Exception as e:
-            logger.error(f"Error creating payment_bindings.txt: {e}")
-            exit(1)
+    def clear_old_files(self):
+        """Delete old output files if they exist."""
+        files = ["amount_end.txt", "amount_medium.txt", "amount_high.txt"]
+        for file in files:
+            try:
+                if os.path.exists(file):
+                    os.remove(file)
+                    logger.info(f"Deleted old file: {file}")
+            except Exception as e:
+                logger.error(f"Error deleting {file}: {e}")
 
     def generate_fake_user_agent(self):
         """Generate a fake user agent with randomized browser/engine."""
@@ -104,11 +104,9 @@ class BalanceSorter:
         try:
             with open("acc.txt", "r") as f:
                 self.accounts = [line.strip() for line in f.readlines() if line.strip()]
-
             with open("pwd.txt", "r") as f:
                 password = f.read().strip()
                 self.password_hash = hashlib.md5(password.encode()).hexdigest()
-
             with open("bank_details.txt", "r") as f:
                 self.payment_details = []
                 for line in f.readlines():
@@ -190,40 +188,21 @@ class BalanceSorter:
         return None, False, None
 
     def get_payment_binding_count(self, bank_no):
-        """Check how many accounts a payment method is bound to in the local payment bindings file."""
-        try:
-            with open(self.payment_bindings_file, "r") as f:
-                lines = f.readlines()[1:]  # Skip header
-                count = sum(1 for line in lines if line.strip() and line.split(",")[3].strip() == bank_no)
-                return count
-        except Exception as e:
-            logger.error(f"Error reading payment bindings for {bank_no}: {e}")
-            return 0
+        """Check how many accounts a payment method is bound to using local bank_details.txt."""
+        count = sum(1 for details in self.payment_details if details[2] == bank_no)
+        return count
 
     def update_payment_binding(self, username, bank_name, bank_user_name, bank_no):
-        """Update payment bindings in the local payment bindings file."""
+        """Update payment bindings in bank_details.txt."""
         try:
-            # Read existing bindings
-            with open(self.payment_bindings_file, "r") as f:
-                lines = f.readlines()
-            
-            # Check if account exists and update or append
-            account_exists = False
-            updated_lines = [lines[0]]  # Keep header
-            for line in lines[1:]:
-                if line.strip() and line.split(",")[0].strip() == username:
-                    updated_lines.append(f"{username},{bank_name},{bank_user_name},{bank_no}\n")
-                    account_exists = True
-                else:
-                    updated_lines.append(line)
-            
-            if not account_exists:
-                updated_lines.append(f"{username},{bank_name},{bank_user_name},{bank_no}\n")
-            
-            # Write updated bindings
-            with open(self.payment_bindings_file, "w") as f:
-                f.writelines(updated_lines)
-            
+            # Remove existing entry for username if it exists
+            self.payment_details = [details for details in self.payment_details if details[0] != username]
+            # Add new entry
+            self.payment_details.append([username, bank_name, bank_user_name, bank_no])
+            # Write updated payment details to file
+            with open("bank_details.txt", "w") as f:
+                for details in self.payment_details:
+                    f.write(f"{details[0]} {details[1]} {details[2]} {details[3]}\n")
             logger.info(f"Updated payment binding for {username}")
             return True
         except Exception as e:
@@ -231,29 +210,12 @@ class BalanceSorter:
             return False
 
     def clear_payment_binding(self, username):
-        """Clear payment binding for an account in the local payment bindings file."""
+        """Clear payment binding for an account in bank_details.txt."""
         try:
-            # Read existing bindings
-            with open(self.payment_bindings_file, "r") as f:
-                lines = f.readlines()
-            
-            # Update the specific account's binding
-            updated_lines = [lines[0]]  # Keep header
-            account_found = False
-            for line in lines[1:]:
-                if line.strip() and line.split(",")[0].strip() == username:
-                    updated_lines.append(f"{username},,,\n")
-                    account_found = True
-                else:
-                    updated_lines.append(line)
-            
-            if not account_found:
-                return True  # No binding to clear, return True
-            
-            # Write updated bindings
-            with open(self.payment_bindings_file, "w") as f:
-                f.writelines(updated_lines)
-            
+            self.payment_details = [details for details in self.payment_details if details[0] != username]
+            with open("bank_details.txt", "w") as f:
+                for details in self.payment_details:
+                    f.write(f"{details[0]} {details[1]} {details[2]} {details[3]}\n")
             logger.info(f"Cleared payment binding for {username}")
             return True
         except Exception as e:
@@ -390,18 +352,23 @@ class BalanceSorter:
         return False
 
     def sort_and_clear_low_balance_accounts(self):
-        """Sort accounts by balance, clear payment details for <150, and save to respective files."""
+        """Sort accounts by balance, clear payment details for <150, and save to respective files in descending order."""
         self.load_files()
+        account_balances = []
         amount_end = []
         amount_medium = []
         amount_high = []
+        successful_sign_ins = 0
+        failed_sign_ins = 0
 
         for username in self.accounts[:]:
             logger.info(f"Processing {username}")
             token = self.login(username)
             if not token:
                 logger.warning(f"Skipping {username} due to login failure")
+                failed_sign_ins += 1
                 continue
+            successful_sign_ins += 1
 
             balance, payment_set, account_data = self.check_payment_details(token)
             if balance is None:
@@ -409,31 +376,41 @@ class BalanceSorter:
                 continue
 
             logger.info(f"{username}: Balance {balance:.2f} units")
-            if balance < 150 and payment_set:
-                bank_no = account_data.get("pk_bank_no", "")
-                bank_name = account_data.get("pk_bank_name", "")
-                bank_user_name = account_data.get("pk_bank_user_name", "")
-                if bank_no:
-                    amount_end.append(f"{username}")
-                random_bank_name, random_user_name, random_bank_no = self.generate_random_payment_details()
-                binding_count = self.get_payment_binding_count(random_bank_no)
-                max_attempts = 5
-                attempt = 0
-                while binding_count >= 2 and attempt < max_attempts:
-                    logger.warning(f"Generated bank number {random_bank_no} is already bound to 2 accounts, regenerating...")
+            account_balances.append((username, balance, payment_set, account_data))
+
+        # Sort accounts by balance in descending order
+        account_balances.sort(key=lambda x: x[1], reverse=True)
+
+        for username, balance, payment_set, account_data in account_balances:
+            if balance < 150:
+                amount_end.append(f"{username} {balance:.2f}")
+                if payment_set:
+                    bank_no = account_data.get("pk_bank_no", "")
+                    bank_name = account_data.get("pk_bank_name", "")
+                    bank_user_name = account_data.get("pk_bank_user_name", "")
                     random_bank_name, random_user_name, random_bank_no = self.generate_random_payment_details()
                     binding_count = self.get_payment_binding_count(random_bank_no)
-                    attempt += 1
-                if binding_count >= 2:
-                    logger.error(f"Could not find unique bank number for {username} after {max_attempts} attempts")
-                    continue
-                if self.set_payment_details(token, random_bank_name, random_user_name, random_bank_no):
-                    self.clear_payment_binding(username)
-                    self.payment_details = [details for details in self.payment_details if details[2] != bank_no]
-                    self.accounts.remove(username)
-                    logger.info(f"Cleared payment details and removed {username} from accounts list")
-                else:
-                    logger.error(f"Failed to clear payment details for {username}")
+                    max_attempts = 5
+                    attempt = 0
+                    while binding_count >= 2 and attempt < max_attempts:
+                        logger.warning(f"Generated bank number {random_bank_no} is already bound to 2 accounts, regenerating...")
+                        random_bank_name, random_user_name, random_bank_no = self.generate_random_payment_details()
+                        binding_count = self.get_payment_binding_count(random_bank_no)
+                        attempt += 1
+                    if binding_count >= 2:
+                        logger.error(f"Could not find unique bank number for {username} after {max_attempts} attempts")
+                        continue
+                    token = self.login(username)  # Re-login to get fresh token
+                    if not token:
+                        logger.error(f"Failed to re-login for {username} to set payment details")
+                        continue
+                    if self.set_payment_details(token, random_bank_name, random_user_name, random_bank_no):
+                        self.clear_payment_binding(username)
+                        self.payment_details = [details for details in self.payment_details if details[2] != bank_no]
+                        self.accounts.remove(username)
+                        logger.info(f"Cleared payment details and removed {username} from accounts list")
+                    else:
+                        logger.error(f"Failed to clear payment details for {username}")
             elif 150 <= balance < 200:
                 amount_medium.append(f"{username} {balance:.2f}")
             elif balance >= 200:
@@ -441,27 +418,27 @@ class BalanceSorter:
 
             time.sleep(2)
 
-        # Write to amount_end.txt
+        # Write sorted entries to amount_end.txt
         try:
-            with open("amount_end.txt", "a") as f:
+            with open("amount_end.txt", "w") as f:
                 for entry in amount_end:
                     f.write(entry + "\n")
             logger.info(f"Wrote {len(amount_end)} usernames to amount_end.txt")
         except Exception as e:
             logger.error(f"Error writing to amount_end.txt: {e}")
 
-        # Write to amount_medium.txt
+        # Write sorted entries to amount_medium.txt
         try:
-            with open("amount_medium.txt", "a") as f:
+            with open("amount_medium.txt", "w") as f:
                 for entry in amount_medium:
                     f.write(entry + "\n")
             logger.info(f"Wrote {len(amount_medium)} accounts to amount_medium.txt")
         except Exception as e:
             logger.error(f"Error writing to amount_medium.txt: {e}")
 
-        # Write to amount_high.txt
+        # Write sorted entries to amount_high.txt
         try:
-            with open("amount_high.txt", "a") as f:
+            with open("amount_high.txt", "w") as f:
                 for entry in amount_high:
                     f.write(entry + "\n")
             logger.info(f"Wrote {len(amount_high)} accounts to amount_high.txt")
@@ -479,6 +456,13 @@ class BalanceSorter:
 
         if not amount_end and not amount_medium and not amount_high:
             logger.info("No accounts processed or categorized")
+
+        # Print processing summary
+        print("\n========================================\nPROCESSING SUMMARY\n========================================")
+        print(f"Total accounts processed: {len(self.accounts)}")
+        print(f"Successful sign-ins: {successful_sign_ins}")
+        print(f"Failed sign-ins: {failed_sign_ins}")
+        print("\nScript completed. Goodbye!")
 
     def run(self):
         """Main execution function."""
