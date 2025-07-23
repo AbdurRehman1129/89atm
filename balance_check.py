@@ -250,51 +250,48 @@ class WhatsAppBalanceChecker:
         for i, balance_data in enumerate(self.balances, 1):
             print(f"{i}. {balance_data['username']} | Balance: {balance_data['balance']:.2f} | User Code: {balance_data['user_code']} | Bank: {balance_data['withdrawal_details'].get('pk_bank_name', 'N/A')} | Holder: {balance_data['withdrawal_details'].get('pk_bank_user_name', 'N/A')} | Acc: {balance_data['withdrawal_details'].get('pk_bank_no', 'N/A')} | Time: {balance_data['timestamp']}")
 
-    def check_single_account(self):
-        """Check balance and withdrawal details for a specific account"""
+    def check_all_accounts(self):
+        """Check balance and withdrawal details for all accounts in acc.txt"""
         self.load_files()
-        print(f"\nAvailable accounts: {', '.join(self.accounts)}")
-        username = input("Enter the username to check: ").strip()
+        print(f"\nLoaded {len(self.accounts)} accounts from acc.txt")
         
-        if username not in self.accounts:
-            print(f"Error: Username '{username}' not found in acc.txt")
-            return
-        
-        print(f"\n{'='*50}")
-        print(f"Processing account: {username}")
-        print(f"{'='*50}")
-        
-        token = self.login(username)
-        if not token:
-            return
+        for username in self.accounts:
+            print(f"\n{'='*50}")
+            print(f"Processing account: {username}")
+            print(f"{'='*50}")
             
-        balance, user_code = self.check_balance(username, token)
-        if balance is None:
-            return
+            token = self.login(username)
+            if not token:
+                continue
+                
+            balance, user_code = self.check_balance(username, token)
+            if balance is None:
+                continue
+                
+            withdrawal_details = self.get_withdrawal_details(username, token)
+            if withdrawal_details is None:
+                withdrawal_details = {
+                    'pk_bank_name': 'N/A',
+                    'pk_bank_user_name': 'N/A',
+                    'pk_bank_no': 'N/A'
+                }
             
-        withdrawal_details = self.get_withdrawal_details(username, token)
-        if withdrawal_details is None:
-            withdrawal_details = {
-                'pk_bank_name': 'N/A',
-                'pk_bank_user_name': 'N/A',
-                'pk_bank_no': 'N/A'
-            }
-        
-        self.update_or_append_balance(username, balance, user_code, withdrawal_details)
-        self.save_balances()
+            self.update_or_append_balance(username, balance, user_code, withdrawal_details)
+            self.save_balances()
+            time.sleep(2)  # Short delay between accounts
 
     def display_menu(self):
         """Display menu and handle user choices"""
         while True:
             print("\nWhatsApp Balance and Withdrawal Details Checker")
             print("=" * 45)
-            print("1. Check balance for a specific account")
+            print("1. Check balance for all accounts")
             print("2. Display all account balances (one-line format)")
             print("3. Exit")
             choice = input("Enter your choice (1-3): ").strip()
             
             if choice == '1':
-                self.check_single_account()
+                self.check_all_accounts()
             elif choice == '2':
                 self.load_files()
                 self.display_balances()
