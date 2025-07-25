@@ -373,7 +373,7 @@ class WhatsAppLinker:
                     }
                     self.sent_codes.append(code_data)
                     self.save_sent_codes()
-                    
+                    self.load_numbers()
                     self.numbers.remove(number)
                     self.save_numbers_to_file()
                     
@@ -384,6 +384,7 @@ class WhatsAppLinker:
                     return True
                 
                 elif result == 'already_linked':
+                    self.load_numbers()
                     self.numbers.remove(number)
                     numbers_to_try.remove(number)
                     self.save_numbers_to_file()
@@ -452,6 +453,7 @@ class WhatsAppLinker:
         
         total_accounts = len(self.accounts)
         for index, username in enumerate(self.accounts, 1):
+            self.load_numbers()
             success = self.process_account(username, index, total_accounts)
             if success:
                 print(f"✓ Completed processing for {username}")
