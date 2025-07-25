@@ -1,4 +1,3 @@
-#online or offline status checker for 89atm accounts
 import requests
 import json
 import time
@@ -37,7 +36,7 @@ class AccountStatusChecker:
                 'name': 'Firefox',
                 'templates': [
                     f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64; rv:{random.choice(firefox_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)}",
-                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}; rv:{random.choice(firefox_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)}",
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}; rv:{random.choice(firefox_versions)}) Gecko20100101 Firefox/{random.choice(firefox_versions)}",
                     f"Mozilla/5.0 (X11; Linux {random.choice(linux_versions)}; rv:{random.choice(firefox_versions)}) Gecko/20100101 Firefox/{random.choice(firefox_versions)}"
                 ]
             },
@@ -119,14 +118,14 @@ class AccountStatusChecker:
             
             if data.get('code') == 0:
                 token = data['data']['token']
-                print(f"✓ Login successful for {username}")
+                print(f"\033[32m✓ Login successful for {username}\033[0m")  # Green
                 return token
             else:
-                print(f"✗ Login failed for {username}: {data.get('msg', 'Unknown error')}")
+                print(f"\033[31m✗ Login failed for {username}: {data.get('msg', 'Unknown error')}\033[0m")  # Red
                 return None
                 
         except Exception as e:
-            print(f"✗ Login error for {username}: {e}")
+            print(f"\033[31m✗ Login error for {username}: {e}\033[0m")  # Red
             return None
 
     def check_account_status(self, token, username):
@@ -149,23 +148,23 @@ class AccountStatusChecker:
                 numbers_data = data.get('data', {}).get('data', [])
                 
                 if not numbers_data:
-                    print(f"  No numbers linked to {username} - marking as offline")
+                    print(f"\033[31m  No numbers linked to {username} - marking as offline\033[0m")  # Red
                     return False
                 
                 online_count = sum(1 for num in numbers_data if num.get('status') == 1)
                 
                 if online_count > 0:
-                    print(f"  ✓ {username} has {online_count} online number(s)")
+                    print(f"\033[32m  ✓ {username} has {online_count} online number(s)\033[0m")  # Green
                     return True
                 else:
-                    print(f"  ✗ {username} has {len(numbers_data)} number(s), all offline")
+                    print(f"\033[31m  ✗ {username} has {len(numbers_data)} number(s), all offline\033[0m")  # Red
                     return False
             else:
-                print(f"  Error checking {username}: {data.get('msg', 'Unknown error')}")
+                print(f"\033[31m  Error checking {username}: {data.get('msg', 'Unknown error')}\033[0m")  # Red
                 return False
                 
         except Exception as e:
-            print(f"  Error checking {username}: {e}")
+            print(f"\033[31m  Error checking {username}: {e}\033[0m")  # Red
             return False
 
     def process_account(self, username):
@@ -176,7 +175,7 @@ class AccountStatusChecker:
         
         token = self.login(username)
         if not token:
-            print(f"  ✗ Failed to login, marking {username} as offline")
+            print(f"\033[31m  ✗ Failed to login, marking {username} as offline\033[0m")  # Red
             self.offline_accounts.append(username)
             return False
         
@@ -214,7 +213,7 @@ class AccountStatusChecker:
         # Save results
         self.save_results()
         print(f"\n{'='*50}")
-        print(f"Results: {len(self.online_accounts)} online, {len(self.offline_accounts)} offline")
+        print(f"Results: \033[32m{len(self.online_accounts)} online\033[0m, \033[31m{len(self.offline_accounts)} offline\033[0m")  # Green and Red
         print(f"Online accounts saved to online.txt")
         print(f"Offline accounts saved to offline.txt")
         
@@ -222,12 +221,12 @@ class AccountStatusChecker:
         if self.online_accounts:
             print("\nOnline Accounts:")
             for acc in self.online_accounts:
-                print(f"  - {acc}")
+                print(f"\033[32m  - {acc}\033[0m")  # Green
         
         if self.offline_accounts:
             print("\nOffline Accounts:")
             for acc in self.offline_accounts:
-                print(f"  - {acc}")
+                print(f"\033[31m  - {acc}\033[0m")  # Red
 
 if __name__ == "__main__":
     checker = AccountStatusChecker()
