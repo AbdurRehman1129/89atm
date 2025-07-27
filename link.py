@@ -5,6 +5,15 @@ import random
 import hashlib
 from datetime import datetime
 import os
+from playsound import playsound  # For audio notification
+from plyer import notification  # For desktop notification
+from dotenv import load_dotenv  # For loading .env file
+import telegram  # For Telegram bot integration
+import asyncio
+import warnings
+
+# Suppress python-telegram-bot warning
+warnings.filterwarnings("ignore", category=UserWarning, module="telegram.utils.request")
 
 class WhatsAppLinker:
     def __init__(self):
@@ -15,7 +24,49 @@ class WhatsAppLinker:
         self.numbers = []
         self.sent_codes = []
         self.signed_in_accounts = {}  # Track accounts that have signed in today
+        # Load .env file
+        load_dotenv()
+        self.telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+        self.bot = None
+        self.loop = None
+        if self.telegram_token and self.telegram_chat_id:
+            try:
+                self.bot = telegram.Bot(token=self.telegram_token)
+                print("✓ Telegram bot initialized successfully")
+            except Exception as e:
+                print(f"✗ Failed to initialize Telegram bot: {e}")
+                self.bot = None
+
+    def send_telegram_message(self, number, linking_code):
+        """Send number and linking code to Telegram chat in copiable format"""
+        if not self.bot:
+            print("  ⚠ Telegram bot not initialized, skipping message sending")
+            return False
         
+        try:
+            # For compatibility with both older and newer versions of python-telegram-bot
+            message_text = f"Number: {number}\nLinking Code: `{linking_code}`"
+            
+            # Try sending as markdown first
+            try:
+                self.bot.send_message(
+                    chat_id=self.telegram_chat_id,
+                    text=message_text,
+                    parse_mode='Markdown'
+                )
+            except:
+                # Fallback to basic text if markdown fails
+                self.bot.send_message(
+                    chat_id=self.telegram_chat_id,
+                    text=f"Number: {number}\nLinking Code: `{linking_code}`"
+                )
+            
+            print("  ✓ Telegram message sent successfully")
+            return True
+        except Exception as e:
+            print(f"  ✗ Failed to send Telegram message: {e}")
+            return False
 
     def generate_fake_user_agent(self):
         """Generate a fake user agent with randomized browser/engine"""
@@ -61,10 +112,11 @@ class WhatsAppLinker:
                 'templates': [
                     f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
                     f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
-                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
+                    f"Mozilla/5.0 (OpenBSD; amd 64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
                     f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 EdgA/{random.choice(edge_versions)}",
-                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} OPR/101.0.0.0",
-                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} Vivaldi/6.2",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 EdgA/{random.choice(edge_versions)}",
+                    f"Mozilla/5.0 (X11; Linux {random.choice(linux_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} OPR/101.0.0.0",
                     f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} UCBrowser/13.4.0.1306",
                     f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} CocCoc/110.0.0",
                     f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} Brave/1.45.0",
@@ -285,9 +337,33 @@ class WhatsAppLinker:
                 msg = data.get('msg', '')
                 
                 if code == 0:
-                    linking_data = data.get('data', {})
+                    linking_data = (data.get('data', {}))
                     linking_code = linking_data.get('code')
                     print(f"    ✓ Linking code generated: {linking_code}")
+                    
+                    # Play notification sound
+                    try:
+                        sound_path = os.path.join(os.path.dirname(__file__), 'src', 'notification.mp3')
+                        playsound(sound_path)
+                        print("    🎵 Notification sound played")
+                    except Exception as e:
+                        print(f"    ⚠ Failed to play notification sound: {e}")
+                    
+                    # Show desktop notification
+                    try:
+                        notification.notify(
+                            title='Linking Code Generated',
+                            message=f'Code: {linking_code} for number {number}',
+                            app_name='WhatsAppLinker',
+                            timeout=10
+                        )
+                        print("    🔔 Desktop notification shown")
+                    except Exception as e:
+                        print(f"    ⚠ Failed to show desktop notification: {e}")
+                    
+                    # Send Telegram message
+                    self.send_telegram_message(number, linking_code)
+                    
                     return 'success', linking_code
                 
                 elif code == 2008:
@@ -358,7 +434,6 @@ class WhatsAppLinker:
                         print(f"  ✗ No numbers available in num.txt for {username}")
                         input("Press Enter to after adding numbers in num.txt...")
                         
-
             for i, number in enumerate(numbers_to_try):
                 print(f"\n  Trying number: {number}")
                 
@@ -439,6 +514,9 @@ class WhatsAppLinker:
     
     def run(self):
         """Main execution function"""
+        # Clear the console screen
+        os.system('cls' if os.name == 'nt' else 'clear')
+        
         print("WhatsApp Number Linking Script")
         print("=" * 40)
         if os.path.exists("send.json"):
