@@ -5,11 +5,6 @@ import random
 import hashlib
 from datetime import datetime
 import os
-from playsound import playsound  # For audio notification
-from plyer import notification  # For desktop notification
-from dotenv import load_dotenv  # For loading .env file
-import telegram  # For Telegram bot integration
-import asyncio
 
 class WhatsAppLinker:
     def __init__(self):
@@ -20,57 +15,7 @@ class WhatsAppLinker:
         self.numbers = []
         self.sent_codes = []
         self.signed_in_accounts = {}  # Track accounts that have signed in today
-        # Load .env file
-        load_dotenv()
-        self.telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
-        self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
-        self.bot = None
-        self.loop = None
-        if self.telegram_token and self.telegram_chat_id:
-            try:
-                self.bot = telegram.Bot(token=self.telegram_token)
-                # Create a single event loop for async operations
-                self.loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(self.loop)
-            except Exception as e:
-                print(f"✗ Failed to initialize Telegram bot: {e}")
-                self.bot = None
-
-    async def send_telegram_message(self, number, linking_code):
-        """Send number and linking code to Telegram chat"""
-        if not self.bot:
-            print("  ⚠ Telegram bot not initialized, skipping message sending")
-            return
         
-        try:
-            # Send number in first message
-            await self.bot.send_message(
-                chat_id=self.telegram_chat_id,
-                text=f"Number: {number}"
-            )
-            # Send linking code in second message with code formatting
-            await self.bot.send_message(
-                chat_id=self.telegram_chat_id,
-                text=f"Linking Code: `{linking_code}`",
-                parse_mode='Markdown'
-            )
-            print("  ✓ Telegram messages sent successfully")
-        except Exception as e:
-            print(f"  ✗ Failed to send Telegram message: {e}")
-
-    def run_async_task(self, coro):
-        """Run an async coroutine in the event loop"""
-        if self.loop and not self.loop.is_closed():
-            return self.loop.run_until_complete(coro)
-        else:
-            print("  ✗ Event loop is closed or not initialized")
-            return None
-
-    def close_loop(self):
-        """Close the event loop cleanly"""
-        if self.loop and not self.loop.is_closed():
-            self.loop.close()
-            print("  ✓ Event loop closed")
 
     def generate_fake_user_agent(self):
         """Generate a fake user agent with randomized browser/engine"""
@@ -116,11 +61,10 @@ class WhatsAppLinker:
                 'templates': [
                     f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
                     f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
-                    f"Mozilla/5.0 (OpenBSD; amd 64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
                     f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 EdgA/{random.choice(edge_versions)}",
-                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)}",
-                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 EdgA/{random.choice(edge_versions)}",
-                    f"Mozilla/5.0 (X11; Linux {random.choice(linux_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} OPR/101.0.0.0",
+                    f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} OPR/101.0.0.0",
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} Vivaldi/6.2",
                     f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} UCBrowser/13.4.0.1306",
                     f"Mozilla/5.0 (Macintosh; Intel Mac OS X {random.choice(macos_versions)}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} CocCoc/110.0.0",
                     f"Mozilla/5.0 (Windows NT {random.choice(windows_versions)}; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/537.36 Edg/{random.choice(edge_versions)} Brave/1.45.0",
@@ -282,7 +226,6 @@ class WhatsAppLinker:
     def sign_in_for_reward(self, token, username):
         """Attempt to sign in for daily reward"""
         # Check if account already signed in today
-        # Use platform-safe date format
         current_date = datetime.now().strftime('%Y-%m-%d')
         if username in self.signed_in_accounts and self.signed_in_accounts[username] == current_date:
             print(f"  ℹ Account {username} already signed in today")
@@ -342,34 +285,9 @@ class WhatsAppLinker:
                 msg = data.get('msg', '')
                 
                 if code == 0:
-                    linking_data = (data.get('data', {}))
+                    linking_data = data.get('data', {})
                     linking_code = linking_data.get('code')
                     print(f"    ✓ Linking code generated: {linking_code}")
-                    
-                    # Play notification sound
-                    try:
-                        sound_path = os.path.join(os.path.dirname(__file__), 'src', 'notification.mp3')
-                        playsound(sound_path)
-                        print("    🎵 Notification sound played")
-                    except Exception as e:
-                        print(f"    ⚠ Failed to play notification sound: {e}")
-                    
-                    # Show desktop notification
-                    try:
-                        notification.notify(
-                            title='Linking Code Generated',
-                            message=f'Code: {linking_code} for number {number}',
-                            app_name='WhatsAppLinker',
-                            timeout=10
-                        )
-                        print("    🔔 Desktop notification shown")
-                    except Exception as e:
-                        print(f"    ⚠ Failed to show desktop notification: {e}")
-                    
-                    # Send Telegram message
-                    if self.bot:
-                        self.run_async_task(self.send_telegram_message(number, linking_code))
-                    
                     return 'success', linking_code
                 
                 elif code == 2008:
@@ -440,6 +358,7 @@ class WhatsAppLinker:
                         print(f"  ✗ No numbers available in num.txt for {username}")
                         input("Press Enter to after adding numbers in num.txt...")
                         
+
             for i, number in enumerate(numbers_to_try):
                 print(f"\n  Trying number: {number}")
                 
@@ -581,12 +500,7 @@ class WhatsAppLinker:
                 break
             else:
                 print("Please enter 'y' or 'n'")
-        # Close the event loop when done
-        self.close_loop()
 
 if __name__ == "__main__":
     linker = WhatsAppLinker()
-    try:
-        linker.run()
-    finally:
-        linker.close_loop()
+    linker.run()
