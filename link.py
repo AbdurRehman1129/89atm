@@ -10,10 +10,6 @@ from plyer import notification  # For desktop notification
 from dotenv import load_dotenv  # For loading .env file
 import telegram  # For Telegram bot integration
 import asyncio
-import warnings
-
-# Suppress python-telegram-bot warning
-warnings.filterwarnings("ignore", category=UserWarning, module="telegram.utils.request")
 
 class WhatsAppLinker:
     def __init__(self):
@@ -33,40 +29,48 @@ class WhatsAppLinker:
         if self.telegram_token and self.telegram_chat_id:
             try:
                 self.bot = telegram.Bot(token=self.telegram_token)
-                print("✓ Telegram bot initialized successfully")
+                # Create a single event loop for async operations
+                self.loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self.loop)
             except Exception as e:
                 print(f"✗ Failed to initialize Telegram bot: {e}")
                 self.bot = None
 
-    def send_telegram_message(self, number, linking_code):
-        """Send number and linking code to Telegram chat in copiable format"""
+    async def send_telegram_message(self, number, linking_code):
+        """Send number and linking code to Telegram chat"""
         if not self.bot:
             print("  ⚠ Telegram bot not initialized, skipping message sending")
-            return False
+            return
         
         try:
-            # For compatibility with both older and newer versions of python-telegram-bot
-            message_text = f"Number: {number}\nLinking Code: `{linking_code}`"
-            
-            # Try sending as markdown first
-            try:
-                self.bot.send_message(
-                    chat_id=self.telegram_chat_id,
-                    text=message_text,
-                    parse_mode='Markdown'
-                )
-            except:
-                # Fallback to basic text if markdown fails
-                self.bot.send_message(
-                    chat_id=self.telegram_chat_id,
-                    text=f"Number: {number}\nLinking Code: `{linking_code}`"
-                )
-            
-            print("  ✓ Telegram message sent successfully")
-            return True
+            # Send number in first message
+            await self.bot.send_message(
+                chat_id=self.telegram_chat_id,
+                text=f"Number: {number}"
+            )
+            # Send linking code in second message with code formatting
+            await self.bot.send_message(
+                chat_id=self.telegram_chat_id,
+                text=f"Linking Code: `{linking_code}`",
+                parse_mode='Markdown'
+            )
+            print("  ✓ Telegram messages sent successfully")
         except Exception as e:
             print(f"  ✗ Failed to send Telegram message: {e}")
-            return False
+
+    def run_async_task(self, coro):
+        """Run an async coroutine in the event loop"""
+        if self.loop and not self.loop.is_closed():
+            return self.loop.run_until_complete(coro)
+        else:
+            print("  ✗ Event loop is closed or not initialized")
+            return None
+
+    def close_loop(self):
+        """Close the event loop cleanly"""
+        if self.loop and not self.loop.is_closed():
+            self.loop.close()
+            print("  ✓ Event loop closed")
 
     def generate_fake_user_agent(self):
         """Generate a fake user agent with randomized browser/engine"""
@@ -278,6 +282,7 @@ class WhatsAppLinker:
     def sign_in_for_reward(self, token, username):
         """Attempt to sign in for daily reward"""
         # Check if account already signed in today
+        # Use platform-safe date format
         current_date = datetime.now().strftime('%Y-%m-%d')
         if username in self.signed_in_accounts and self.signed_in_accounts[username] == current_date:
             print(f"  ℹ Account {username} already signed in today")
@@ -362,7 +367,8 @@ class WhatsAppLinker:
                         print(f"    ⚠ Failed to show desktop notification: {e}")
                     
                     # Send Telegram message
-                    self.send_telegram_message(number, linking_code)
+                    if self.bot:
+                        self.run_async_task(self.send_telegram_message(number, linking_code))
                     
                     return 'success', linking_code
                 
@@ -514,9 +520,6 @@ class WhatsAppLinker:
     
     def run(self):
         """Main execution function"""
-        # Clear the console screen
-        os.system('cls' if os.name == 'nt' else 'clear')
-        
         print("WhatsApp Number Linking Script")
         print("=" * 40)
         if os.path.exists("send.json"):
@@ -578,7 +581,12 @@ class WhatsAppLinker:
                 break
             else:
                 print("Please enter 'y' or 'n'")
+        # Close the event loop when done
+        self.close_loop()
 
 if __name__ == "__main__":
     linker = WhatsAppLinker()
-    linker.run()
+    try:
+        linker.run()
+    finally:
+        linker.close_loop()
