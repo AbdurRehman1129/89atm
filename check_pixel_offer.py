@@ -10,6 +10,8 @@ Google Pixel Offer Checker – FULL FLOW ($100 / $452)
 - Saves: imei, status, offer_amount
 - Retries for dropdown, continue, and back buttons (up to 3 times)
 - Removes processed IMEIs from input CSV
+- NEW: Restarts browser on IMEI field not found
+- NEW: Plays sound.mp3 on captcha/login detection
 """
 
 import csv
@@ -17,6 +19,7 @@ import time
 import argparse
 from pathlib import Path
 import re
+from playsound import playsound  # For playing sound.mp3
 
 from playwright.sync_api import sync_playwright
 
@@ -32,9 +35,22 @@ USER_XPATH = "/html/body/div[2]/div/div[1]/section/div/div[1]/div/article/div[67
 # Helper Functions
 # -----------------------------------------------------------
 
+class RestartException(Exception):
+    pass
+
+
+def play_notification_sound():
+    """Play sound.mp3 to notify user (e.g., for captcha)."""
+    try:
+        playsound("sound.mp3", block=False)  # Non-blocking play
+    except Exception as e:
+        print(f"Error playing sound: {e}")
+
+
 def wait_for_google_signin(page):
     if "accounts.google.com" in page.url:
-        print("\n[!] Login required.")
+        print("\n[!] Login required (possible captcha).")
+        play_notification_sound()  # Notify user with sound
         input("Complete login → press ENTER...")
     time.sleep(1)
 
@@ -265,8 +281,8 @@ def process_imei(page, url, imei, out_dir):
 
     print(f"Filling IMEI: {imei}")
     if not fill_imei(page, imei):
-        print("IMEI field not found")
-        return imei, "IMEI field not found", "$0"
+        print("IMEI field not found - triggering restart")
+        raise RestartException("IMEI field not found")
 
     if not click_continue(page):
         print("Continue failed after IMEI")
@@ -422,14 +438,32 @@ def main():
             if not file_exists:
                 w.writerow(["imei", "status", "offer_amount"])
 
-            for i, imei in enumerate(imeis[:], 1):  # Copy list to avoid modification issues
-                print(f"\n[{i}/{len(imeis)}] Checking {imei}")
+            i = 0
+            while i < len(imeis):
+                imei = imeis[i]
+                print(f"\n[{i+1}/{len(imeis)}] Checking {imei}")
                 try:
                     imei_res, status, offer = process_imei(page, args.url, imei, out_dir)
                     w.writerow([imei_res, status, offer])
                     f.flush()
                     # Remove processed IMEI from input CSV
                     remove_imei_from_csv(args.csv, imei)
+                    i += 1  # Move to next IMEI
+                except RestartException:
+                    print("Restarting browser due to IMEI field issue...")
+                    try:
+                        ctx.close()
+                    except:
+                        pass
+                    # Relaunch context
+                    ctx = p.chromium.launch_persistent_context(
+                        user_data_dir=args.profile,
+                        headless=args.headless,
+                        viewport={"width": 1200, "height": 800},
+                        args=["--start-maximized"]
+                    )
+                    page = ctx.new_page()
+                    # Do not increment i, so it retries the same IMEI
                 except KeyboardInterrupt:
                     print("\nStopped by user.")
                     break
@@ -439,6 +473,7 @@ def main():
                     f.flush()
                     # Still remove on error to avoid reprocessing
                     remove_imei_from_csv(args.csv, imei)
+                    i += 1
 
         try:
             ctx.close()
@@ -450,5 +485,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-#python check_pixel_offer.py --url "https://support.google.com/pixelphone/workflow/16310202?sjid=6958470614949898085-NA&visit_id=638883126037606750-3080537620&p=pixel6a_battery_help&rd=1&authuser=3" --csv imeis.csv
