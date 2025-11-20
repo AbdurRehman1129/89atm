@@ -1,18 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""
-Google Pixel Offer Checker – FULL FLOW ($100 / $452)
-- NO REFRESH (AVOIDS CAPTCHA)
-- Smart Back Navigation: 3× only if went to offer, 1× if already used, 2× if country failed
-- Handles "Not a Pixel device" → stays on IMEI page
-- Clears old IMEI before next
-- Saves: imei, status, offer_amount
-- Retries for dropdown, continue, and back buttons (up to 3 times)
-- Removes processed IMEIs from input CSV
-- NEW: Restarts browser on IMEI field not found
-"""
-
 import csv
 import time
 import argparse
